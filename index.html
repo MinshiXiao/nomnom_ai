@@ -2,86 +2,138 @@
 <html>
 <head>
     <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>NomNom 美食地圖</title>
     <style>
-        /* 讓地圖填滿螢幕 */
-        html, body { height: 100%; margin: 0; padding: 0; }
+        /* 1. 基礎設定：讓地圖填滿手機螢幕 */
+        html, body { height: 100%; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
+        
         #map { height: 100%; width: 100%; }
+        
+        /* 2. 載入畫面樣式 */
         .loading { 
             position: absolute; top: 50%; left: 50%; 
             transform: translate(-50%, -50%); 
-            font-family: sans-serif; color: #666;
+            color: #666; font-size: 14px;
+            background: rgba(255,255,255,0.9);
+            padding: 20px; border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            z-index: 100;
+            display: flex; flex-direction: column; align-items: center;
         }
+
+        /* 3. 定位按鈕樣式 (仿 Google Maps 原生按鈕) */
+        #locationButton {
+            display: none; /* 初始隱藏 */
+            position: absolute; 
+            bottom: 120px; /* 避開右下角的 Google Logo */
+            right: 16px; 
+            z-index: 5;
+            background: white;
+            border: none;
+            border-radius: 50%; /* 圓形按鈕 */
+            width: 48px; height: 48px;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+            cursor: pointer;
+            font-size: 22px;
+            align-items: center; justify-content: center;
+        }
+        #locationButton:active { background: #f0f0f0; }
     </style>
 </head>
 <body>
     <div id="map"></div>
-    <div id="loading" class="loading">讀取美食資料中...</div>
+    
+    <div id="loading" class="loading">
+        <span>🍱 正在讀取美食清單...</span>
+    </div>
+    
+    <button id="locationButton" title="回到我的位置">📍</button>
 
     <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
 
     <script>
-        const XANO_API_URL = "https://x8ki-letl-twmt.n7.xano.io/api:ygZLF4dX/user/map_restaurants"; // 填入 Xano API
+        // ==========================================
+        // ⚠️ 請修改以下變數
+        // ==========================================
+        const CONFIG = {
+            LIFF_ID: "2008587350-Nba5PAbR", 
+            XANO_API: "https://x8ki-letl-twmt.n7.xano.io/api:ygZLF4dX/user/map_restaurants", 
+            GOOGLE_MAPS_KEY: "AIzaSyBxA02Disbhv_kHeJ8OlTF2rCOTmXTqN1E" 
+        };
 
+        // ==========================================
+        // 主程式邏輯
+        // ==========================================
+        
         async function main() {
-            // 1. 初始化 LIFF
-            await liff.init({ liffId: "2008587350-Nba5PAbR" }); // 填入 LIFF ID
-
-            if (!liff.isLoggedIn()) {
-                liff.login();
-                return;
-            }
-
-            const profile = await liff.getProfile();
-            const userId = profile.userId;
-
-            // 2. 呼叫 Xano 拿資料
             try {
-                const response = await fetch(`${XANO_API_URL}?line_user_id=${userId}`);
-                const restaurants = await response.json();
+                // 1. 初始化 LIFF
+                await liff.init({ liffId: CONFIG.LIFF_ID });
+
+                // 2. 檢查登入狀態
+                if (!liff.isLoggedIn()) {
+                    liff.login();
+                    return;
+                }
+
+                // 3. 取得用戶 ID
+                const profile = await liff.getProfile();
+                const userId = profile.userId;
                 
+                console.log("User ID:", userId);
+
+                // 4. 呼叫 Xano API 取得餐廳資料
+                // 記得加上時間戳記避免快取 (cache busting)
+                const apiUrl = `${CONFIG.XANO_API}?line_user_id=${userId}&t=${new Date().getTime()}`;
+                const response = await fetch(apiUrl);
+                
+                if (!response.ok) throw new Error("API 請求失敗");
+                
+                const data = await response.json();
+                
+                // 5. 隱藏 Loading，開始畫地圖
                 document.getElementById('loading').style.display = 'none';
-                initMap(restaurants);
+                initMap(data);
+
             } catch (error) {
-                alert("讀取資料失敗：" + error.message);
+                document.getElementById('loading').innerHTML = `⚠️ 發生錯誤：<br>${error.message}`;
+                console.error(error);
             }
         }
 
         function initMap(data) {
-            // 1. 處理資料結構
-            const restaurants = Array.isArray(data) ? data : (data.restaurants || []);
+            // 處理 Xano 回傳格式 (陣列或物件)
+            const restaurants = Array.isArray(data) ? data : (data.restaurants || data.items || []);
+            console.log(`共載入 ${restaurants.length} 間餐廳`);
 
-            console.log("收到的餐廳數量:", restaurants.length);
-
-            // 2. 預設中心點 (台北)
-            const center = { lat: 25.0478, lng: 121.5170 };
+            // 預設中心點 (台北車站)
+            let center = { lat: 25.0478, lng: 121.5170 };
             
-            // 如果第一筆資料有座標，就以它為中心
-            // [修正點] 改用 .location
+            // 如果有資料，以第一筆資料為中心
             if (restaurants.length > 0 && restaurants[0].location && restaurants[0].location.data) {
-                center.lat = restaurants[0].location.data.lat;
-                center.lng = restaurants[0].location.data.lng;
+                center = {
+                    lat: restaurants[0].location.data.lat,
+                    lng: restaurants[0].location.data.lng
+                };
             }
 
+            // 初始化 Google Map
             const map = new google.maps.Map(document.getElementById("map"), {
-                zoom: 13,
+                zoom: 14,
                 center: center,
-                mapTypeControl: false,
-                streetViewControl: false,
-                fullscreenControl: false,
-                clickableIcons: false // 避免點到 Google 原本地標干擾
+                mapTypeControl: false,       // 隱藏地圖類型控制
+                streetViewControl: false,    // 隱藏街景小人
+                fullscreenControl: false,    // 隱藏全螢幕按鈕
+                clickableIcons: false        // 避免點到地圖原生標地
             });
 
             const infoWindow = new google.maps.InfoWindow();
 
-            // 3. 撒點迴圈
+            // 撒點 (Markers)
             restaurants.forEach(store => {
-                // [修正點] 這裡全部改成 store.location
-                if (!store.location || !store.location.data || !store.location.data.lat) {
-                    console.warn("略過無座標餐廳:", store.name);
-                    return;
-                }
+                // 防呆檢查：確認有座標資料
+                if (!store.location || !store.location.data || !store.location.data.lat) return;
 
                 const position = { 
                     lat: store.location.data.lat, 
@@ -91,32 +143,134 @@
                 const marker = new google.maps.Marker({
                     position: position, 
                     map: map,
-                    title: store.name
+                    title: store.name,
+                    // 如果你想自訂圖釘顏色，可以在這裡加 icon 屬性
                 });
 
-                // 點擊事件 (Info Window)
+                // 點擊圖釘事件 (資訊卡)
                 marker.addListener("click", () => {
-                    // 簡單的卡片樣式
+                    // 預設圖片
+                    const bgImage = store.cover_image || 'https://images.unsplash.com/photo-1555396273-367ea4eb4db5?w=400';
+                    
                     const content = `
-                        <div style="padding:12px; max-width:220px; font-family: sans-serif;">
-                            <h3 style="margin:0 0 5px 0; font-size:16px; color:#333;">${store.name}</h3>
-                            <p style="margin:0 0 10px 0; color:#888; font-size:12px;">
-                                ${store.category || '美食'}
-                            </p>
-                            <a href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(store.name)}" 
-                               target="_blank" 
-                               style="display:block; text-align:center; background:#FF6B6B; color:white; text-decoration:none; padding:8px 0; border-radius:6px; font-size:14px; font-weight:bold;">
-                               📍 導航去這
-                            </a>
+                        <div style="padding:0; max-width:240px; font-family: sans-serif;">
+                            <div style="
+                                height:120px; width:100%; 
+                                background-image:url('${bgImage}'); 
+                                background-size:cover; background-position:center; 
+                                border-radius:6px 6px 0 0; margin-bottom:10px;">
+                            </div>
+                            <div style="padding: 0 10px 10px 10px;">
+                                <h3 style="margin:0 0 5px 0; font-size:16px; color:#333;">${store.name}</h3>
+                                <p style="margin:0 0 10px 0; color:#888; font-size:12px;">
+                                    🏷️ ${store.category || '美食'}
+                                </p>
+                                <a href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(store.name)}" 
+                                   target="_blank" 
+                                   style="
+                                     display:block; text-align:center; 
+                                     background:#FF6B6B; color:white; 
+                                     text-decoration:none; padding:8px 0; 
+                                     border-radius:4px; font-size:14px; font-weight:bold;">
+                                   📍 導航去這
+                                </a>
+                            </div>
                         </div>
                     `;
                     infoWindow.setContent(content);
                     infoWindow.open(map, marker);
                 });
             });
+
+            // 啟動使用者定位功能
+            setupMyLocation(map);
+        }
+
+        // 使用者定位邏輯 (藍點 + 按鈕)
+        function setupMyLocation(map) {
+            const locationBtn = document.getElementById("locationButton");
+            locationBtn.style.display = "flex"; // 顯示按鈕
+
+            // 定義藍色小圓點樣式
+            const userIcon = {
+                path: google.maps.SymbolPath.CIRCLE,
+                fillColor: '#4285F4',
+                fillOpacity: 1,
+                scale: 7,
+                strokeColor: 'white',
+                strokeWeight: 2,
+                strokeOpacity: 1
+            };
+            
+            // 誤差範圍圓圈
+            let accuracyCircle = null;
+            let userMarker = null;
+
+            const goToMyLocation = () => {
+                if (navigator.geolocation) {
+                    navigator.geolocation.getCurrentPosition(
+                        (position) => {
+                            const pos = {
+                                lat: position.coords.latitude,
+                                lng: position.coords.longitude,
+                            };
+
+                            // 清除舊的誤差圓
+                            if (accuracyCircle) accuracyCircle.setMap(null);
+
+                            if (!userMarker) {
+                                // 建立藍點
+                                userMarker = new google.maps.Marker({
+                                    position: pos,
+                                    map: map,
+                                    icon: userIcon,
+                                    title: "您的位置",
+                                    zIndex: 999
+                                });
+                            } else {
+                                userMarker.setPosition(pos);
+                            }
+
+                            // 畫出誤差範圍 (淡藍色圓圈)
+                            accuracyCircle = new google.maps.Circle({
+                                strokeColor: "#4285F4",
+                                strokeOpacity: 0.2,
+                                strokeWeight: 1,
+                                fillColor: "#4285F4",
+                                fillOpacity: 0.1,
+                                map: map,
+                                center: pos,
+                                radius: position.coords.accuracy || 50
+                            });
+
+                            map.setCenter(pos);
+                            map.setZoom(15);
+                        },
+                        (error) => {
+                            console.error(error);
+                            // 靜默失敗或簡單提示，避免一直跳窗
+                        },
+                        { enableHighAccuracy: true } // 要求高精準度
+                    );
+                } else {
+                    alert("瀏覽器不支援定位功能");
+                }
+            };
+
+            // 綁定按鈕事件
+            locationBtn.addEventListener("click", goToMyLocation);
+
+            // 網頁載入時自動執行一次
+            goToMyLocation();
         }
     </script>
     
-    <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyBxA02Disbhv_kHeJ8OlTF2rCOTmXTqN1E&callback=main" async defer></script>
+    <script>
+        const script = document.createElement('script');
+        script.src = `https://maps.googleapis.com/maps/api/js?key=${CONFIG.GOOGLE_MAPS_KEY}&callback=main`;
+        script.async = true;
+        script.defer = true;
+        document.head.appendChild(script);
+    </script>
 </body>
 </html>
