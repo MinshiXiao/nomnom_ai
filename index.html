@@ -49,44 +49,64 @@
         }
 
         function initMap(data) {
-            // 預設中心點 (台北)
+            // 1. 處理資料結構
+            const restaurants = Array.isArray(data) ? data : (data.restaurants || []);
+
+            console.log("收到的餐廳數量:", restaurants.length);
+
+            // 2. 預設中心點 (台北)
             const center = { lat: 25.0478, lng: 121.5170 };
             
-            // 如果有資料，以第一筆資料為中心
-            if (data.length > 0 && data[0].geo_point) {
-                center.lat = data[0].geo_point.data.lat;
-                center.lng = data[0].geo_point.data.lng;
+            // 如果第一筆資料有座標，就以它為中心
+            // [修正點] 改用 .location
+            if (restaurants.length > 0 && restaurants[0].location && restaurants[0].location.data) {
+                center.lat = restaurants[0].location.data.lat;
+                center.lng = restaurants[0].location.data.lng;
             }
 
             const map = new google.maps.Map(document.getElementById("map"), {
                 zoom: 13,
                 center: center,
                 mapTypeControl: false,
-                streetViewControl: false
+                streetViewControl: false,
+                fullscreenControl: false,
+                clickableIcons: false // 避免點到 Google 原本地標干擾
             });
 
-            // 3. 撒點
             const infoWindow = new google.maps.InfoWindow();
 
-            data.forEach(store => {
-                if (!store.geo_point) return;
+            // 3. 撒點迴圈
+            restaurants.forEach(store => {
+                // [修正點] 這裡全部改成 store.location
+                if (!store.location || !store.location.data || !store.location.data.lat) {
+                    console.warn("略過無座標餐廳:", store.name);
+                    return;
+                }
+
+                const position = { 
+                    lat: store.location.data.lat, 
+                    lng: store.location.data.lng 
+                };
 
                 const marker = new google.maps.Marker({
-                    position: store.geo_point.data, // Xano GeoPoint 結構
+                    position: position, 
                     map: map,
                     title: store.name
                 });
 
-                // 點擊圖釘顯示資訊與導航按鈕
+                // 點擊事件 (Info Window)
                 marker.addListener("click", () => {
+                    // 簡單的卡片樣式
                     const content = `
-                        <div style="padding:5px; max-width:200px;">
-                            <h3 style="margin:0 0 5px 0;">${store.name}</h3>
-                            <p style="margin:0 0 5px 0; color:#666; font-size:12px;">${store.category || '美食'}</p>
+                        <div style="padding:12px; max-width:220px; font-family: sans-serif;">
+                            <h3 style="margin:0 0 5px 0; font-size:16px; color:#333;">${store.name}</h3>
+                            <p style="margin:0 0 10px 0; color:#888; font-size:12px;">
+                                ${store.category || '美食'}
+                            </p>
                             <a href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(store.name)}" 
                                target="_blank" 
-                               style="display:inline-block; background:#FF6B6B; color:white; text-decoration:none; padding:5px 10px; border-radius:4px; font-size:12px;">
-                               📍 導航
+                               style="display:block; text-align:center; background:#FF6B6B; color:white; text-decoration:none; padding:8px 0; border-radius:6px; font-size:14px; font-weight:bold;">
+                               📍 導航去這
                             </a>
                         </div>
                     `;
