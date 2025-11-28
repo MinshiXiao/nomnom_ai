@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NomNom 美食地圖</title>
+    <style>
+        /* 讓地圖填滿螢幕 */
+        html, body { height: 100%; margin: 0; padding: 0; }
+        #map { height: 100%; width: 100%; }
+        .loading { 
+            position: absolute; top: 50%; left: 50%; 
+            transform: translate(-50%, -50%); 
+            font-family: sans-serif; color: #666;
+        }
+    </style>
+</head>
+<body>
+    <div id="map"></div>
+    <div id="loading" class="loading">讀取美食資料中...</div>
+
+    <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+
+    <script>
+        const XANO_API_URL = "https://x8ki-letl-twmt.n7.xano.io/api:ygZLF4dX/user/map_restaurants"; // 填入 Xano API
+
+        async function main() {
+            // 1. 初始化 LIFF
+            await liff.init({ liffId: "2008587350-Nba5PAbR" }); // 填入 LIFF ID
+
+            if (!liff.isLoggedIn()) {
+                liff.login();
+                return;
+            }
+
+            const profile = await liff.getProfile();
+            const userId = profile.userId;
+
+            // 2. 呼叫 Xano 拿資料
+            try {
+                const response = await fetch(`${XANO_API_URL}?line_user_id=${userId}`);
+                const restaurants = await response.json();
+                
+                document.getElementById('loading').style.display = 'none';
+                initMap(restaurants);
+            } catch (error) {
+                alert("讀取資料失敗：" + error.message);
+            }
+        }
+
+        function initMap(data) {
+            // 預設中心點 (台北)
+            const center = { lat: 25.0478, lng: 121.5170 };
+            
+            // 如果有資料，以第一筆資料為中心
+            if (data.length > 0 && data[0].geo_point) {
+                center.lat = data[0].geo_point.data.lat;
+                center.lng = data[0].geo_point.data.lng;
+            }
+
+            const map = new google.maps.Map(document.getElementById("map"), {
+                zoom: 13,
+                center: center,
+                mapTypeControl: false,
+                streetViewControl: false
+            });
+
+            // 3. 撒點
+            const infoWindow = new google.maps.InfoWindow();
+
+            data.forEach(store => {
+                if (!store.geo_point) return;
+
+                const marker = new google.maps.Marker({
+                    position: store.geo_point.data, // Xano GeoPoint 結構
+                    map: map,
+                    title: store.name
+                });
+
+                // 點擊圖釘顯示資訊與導航按鈕
+                marker.addListener("click", () => {
+                    const content = `
+                        <div style="padding:5px; max-width:200px;">
+                            <h3 style="margin:0 0 5px 0;">${store.name}</h3>
+                            <p style="margin:0 0 5px 0; color:#666; font-size:12px;">${store.category || '美食'}</p>
+                            <a href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(store.name)}" 
+                               target="_blank" 
+                               style="display:inline-block; background:#FF6B6B; color:white; text-decoration:none; padding:5px 10px; border-radius:4px; font-size:12px;">
+                               📍 導航
+                            </a>
+                        </div>
+                    `;
+                    infoWindow.setContent(content);
+                    infoWindow.open(map, marker);
+                });
+            });
+        }
+    </script>
+    
+    <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyBxA02Disbhv_kHeJ8OlTF2rCOTmXTqN1E&callback=main" async defer></script>
+</body>
+</html>
