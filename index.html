@@ -1,294 +1,439 @@
 <!DOCTYPE html>
-<html>
+<html lang="zh-TW">
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>NomNom 美食地圖</title>
+    <title>NomNom 美食手帳</title>
     <style>
-        /* 基礎設定 */
-        html, body { height: 100%; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
+        /* --- 基礎樣式 --- */
+        :root { --primary: #FF6B6B; --text: #333; --bg: #F9F9F9; --gray: #888; }
+        html, body { height: 100%; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: var(--bg); color: var(--text); }
         
-        #map { height: 100%; width: 100%; }
-        
-        /* [修正] 載入畫面樣式 */
+        /* --- 視圖容器 --- */
+        #map-view, #list-view { display: none; height: 100%; width: 100%; }
+        #list-view { box-sizing: border-box; padding: 16px; overflow-y: auto; padding-bottom: 80px; }
+
+        /* --- 載入畫面 --- */
         .loading { 
-            position: absolute; top: 50%; left: 50%; 
-            transform: translate(-50%, -50%); 
-            color: #666; font-size: 14px;
-            background: rgba(255,255,255,0.95);
-            padding: 20px 40px; /* 加寬左右 padding */
-            border-radius: 12px;
-            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
-            z-index: 100;
-            display: flex; flex-direction: column; align-items: center;
-            font-weight: bold;
-            white-space: nowrap; /* [關鍵] 強制文字不換行 */
-            min-width: 200px;    /* [關鍵] 設定最小寬度 */
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(255,255,255,0.95); z-index: 9999;
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+            color: var(--gray); font-weight: bold; font-size: 14px;
         }
 
-        /* 定位按鈕 */
+        /* --- 地圖元件 --- */
+        #map { height: 100%; width: 100%; }
         #locationButton {
-            display: none;
-            position: absolute; 
-            bottom: 120px; 
-            right: 16px; 
-            z-index: 5;
-            background: white;
-            border: none;
-            border-radius: 50%;
-            width: 48px; height: 48px;
-            box-shadow: 0 2px 6px rgba(0,0,0,0.3);
-            cursor: pointer;
-            font-size: 22px;
-            display: flex; align-items: center; justify-content: center;
+            display: none; position: absolute; bottom: 30px; right: 16px; z-index: 5;
+            background: white; border: none; border-radius: 50%; width: 48px; height: 48px;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.3); cursor: pointer; font-size: 22px;
+            align-items: center; justify-content: center;
         }
-        #locationButton:active { background: #f0f0f0; }
+
+        /* --- 列表卡片 --- */
+        .journal-card {
+            background: white; border-radius: 12px; padding: 16px; margin-bottom: 16px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.05); cursor: pointer; position: relative;
+            transition: transform 0.1s;
+        }
+        .journal-card:active { transform: scale(0.98); }
+        .card-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 8px; }
+        .card-title { font-size: 18px; font-weight: bold; margin: 0; flex: 1; }
+        .card-badges { display: flex; gap: 4px; flex-wrap: wrap; }
+        .badge { font-size: 10px; padding: 2px 6px; border-radius: 4px; background: #eee; color: #666; }
+        .badge.visited { background: #E3FCEF; color: #006644; }
+        .badge.cash-only { background: #FFEBE6; color: #BF2600; }
+        .card-info { font-size: 13px; color: var(--gray); margin-bottom: 6px; display: flex; align-items: center; gap: 5px;}
+        .card-review { font-size: 14px; color: #444; line-height: 1.4; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+
+        /* --- 編輯彈窗 (Dialog) --- */
+        dialog {
+            border: none; border-radius: 16px; padding: 0; width: 90%; max-width: 400px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.2);
+            max-height: 90vh; overflow-y: auto;
+        }
+        dialog::backdrop { background: rgba(0,0,0,0.5); }
+        .dialog-header { padding: 16px; border-bottom: 1px solid #eee; display: flex; justify-content: space-between; align-items: center; position: sticky; top: 0; background: white; z-index: 10;}
+        .dialog-body { padding: 16px; }
+        .dialog-footer { padding: 16px; border-top: 1px solid #eee; text-align: right; background: white; position: sticky; bottom: 0; }
+        
+        /* 表單元件 */
+        .form-group { margin-bottom: 16px; }
+        .form-label { display: block; font-size: 13px; color: var(--gray); margin-bottom: 6px; font-weight: bold; }
+        .form-input, textarea, select { width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 8px; font-size: 14px; box-sizing: border-box; }
+        textarea { resize: vertical; min-height: 80px; }
+        
+        /* 標籤選取器 (Chips) */
+        .chips-container { display: flex; flex-wrap: wrap; gap: 8px; }
+        .chip { 
+            padding: 6px 12px; border: 1px solid #ddd; border-radius: 20px; font-size: 13px; cursor: pointer; color: #555;
+            transition: all 0.2s; user-select: none;
+        }
+        .chip.selected { background: var(--primary); color: white; border-color: var(--primary); }
+
+        /* 按鈕 */
+        .btn { padding: 10px 20px; border-radius: 8px; border: none; font-weight: bold; cursor: pointer; font-size: 14px; }
+        .btn-primary { background: var(--primary); color: white; }
+        .btn-secondary { background: #eee; color: #333; margin-right: 8px; }
+        .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+        /* 星星評分 */
+        .star-rating { font-size: 24px; color: #ddd; cursor: pointer; }
+        .star-rating span.active { color: #FFD700; }
     </style>
 </head>
 <body>
-    <div id="map"></div>
-    
+
     <div id="loading" class="loading">
-        <span>🍱 正在讀取美食清單...</span>
+        <span>🍱 正在讀取美食資料...</span>
     </div>
-    
-    <button id="locationButton" title="回到我的位置">📍</button>
+
+    <div id="map-view">
+        <div id="map"></div>
+        <button id="locationButton">📍</button>
+    </div>
+
+    <div id="list-view">
+        <div style="margin-bottom: 15px; font-weight: bold; color: var(--gray);">我的美食手帳</div>
+        <div id="list-container"></div>
+    </div>
+
+    <dialog id="editDialog">
+        <div class="dialog-header">
+            <h3 style="margin:0;" id="dialogTitle">餐廳名稱</h3>
+            <span style="font-size:20px; cursor:pointer;" onclick="closeModal()">✕</span>
+        </div>
+        <div class="dialog-body">
+            <form id="editForm">
+                <input type="hidden" id="input_id">
+                
+                <div class="form-group" style="display: flex; align-items: center; gap: 10px;">
+                    <label class="switch">
+                        <input type="checkbox" id="input_visited"> 
+                        <span style="font-size: 14px;">✅ 我已經去吃過了</span>
+                    </label>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">評分</label>
+                    <div class="star-rating" id="starContainer">
+                        <span data-val="1">★</span><span data-val="2">★</span><span data-val="3">★</span><span data-val="4">★</span><span data-val="5">★</span>
+                    </div>
+                    <input type="hidden" id="input_rating" value="0">
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">心得筆記</label>
+                    <textarea id="input_review" placeholder="這家店好不好吃？有什麼必點的？"></textarea>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">支付方式</label>
+                    <div class="chips-container" id="chips_payment"></div>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">跟誰去？</label>
+                    <div class="chips-container" id="chips_companions"></div>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">體驗標籤</label>
+                    <div class="chips-container" id="chips_tags"></div>
+                </div>
+                
+                <div class="form-group" style="display:flex; gap:10px;">
+                    <div style="flex:1;">
+                        <label class="form-label">造訪日期</label>
+                        <input type="date" id="input_date" class="form-input">
+                    </div>
+                    <div style="flex:1;">
+                        <label class="form-label">平均消費</label>
+                        <input type="number" id="input_spend" class="form-input" placeholder="300">
+                    </div>
+                </div>
+            </form>
+        </div>
+        <div class="dialog-footer">
+            <button class="btn btn-secondary" onclick="closeModal()">取消</button>
+            <button class="btn btn-primary" id="saveBtn" onclick="submitForm()">儲存更新</button>
+        </div>
+    </dialog>
 
     <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
 
     <script>
         // ==========================================
-        // 1. 設定檔 (請填入你的 Key)
+        // 1. 設定區 (請修改這裡)
         // ==========================================
         const CONFIG = {
-            LIFF_ID: "2008587350-Nba5PAbR",
-            XANO_API: "https://x8ki-letl-twmt.n7.xano.io/api:ygZLF4dX/user/map_restaurants",
+            LIFF_ID: "2008587350-Nba5PAbR", 
+            // 讀取用 GET API
+            API_GET: "https://x8ki-letl-twmt.n7.xano.io/api:ygZLF4dX/user/map_restaurants", 
+            // 更新用 POST API
+            API_UPDATE: "https://x8ki-letl-twmt.n7.xano.io/api:ygZLF4dX/user/update_journal", 
             GOOGLE_MAPS_KEY: "AIzaSyBxA02Disbhv_kHeJ8OlTF2rCOTmXTqN1E"
+        };
+
+        const TAG_OPTIONS = {
+            payment: ["💰 只收現金", "💳 可刷卡", "📱 行動支付"],
+            companions: ["🧍 獨自", "👫 約會", "👯 朋友", "👨‍👩‍👧‍👦 家人", "💼 商務"],
+            tags: ["😋 好吃", "雷", "💰 CP值高", "📸 好拍", "💁 服務好", "🤫 安靜", "🔥 熱鬧"]
         };
 
         const DEFAULT_ICON = "https://res.cloudinary.com/dtlxflkkb/image/upload/v1764438323/location-pin_wjwvj6.png";
 
+        let allData = []; // 全域資料快取
+        let iconMap = {}; // 圖示查找表
+
         // ==========================================
-        // 2. 主程式邏輯
+        // 2. 初始化與路由
         // ==========================================
-        
         async function main() {
             try {
                 await liff.init({ liffId: CONFIG.LIFF_ID });
+                if (!liff.isLoggedIn()) { liff.login(); return; }
 
-                if (!liff.isLoggedIn()) {
-                    liff.login();
-                    return;
+                const userId = (await liff.getProfile()).userId;
+                
+                // 判斷路由
+                const urlParams = new URLSearchParams(window.location.search);
+                const viewMode = urlParams.get('view') || 'map'; // 預設地圖
+
+                // 撈資料
+                await fetchData(userId);
+
+                // 渲染畫面
+                document.getElementById('loading').style.display = 'none';
+                
+                if (viewMode === 'list') {
+                    document.getElementById('list-view').style.display = 'block';
+                    renderList();
+                } else {
+                    document.getElementById('map-view').style.display = 'block';
+                    initMap();
                 }
 
-                const profile = await liff.getProfile();
-                const userId = profile.userId;
-                console.log("User ID:", userId);
-
-                const apiUrl = `${CONFIG.XANO_API}?line_user_id=${userId}&t=${new Date().getTime()}`;
-                const response = await fetch(apiUrl);
-                
-                if (!response.ok) throw new Error("API 請求失敗");
-                
-                const responseData = await response.json();
-                
-                // --- Side-loading 組裝 ---
-                const restaurants = responseData.items || [];
-                
-                // 建立圖示查找表
-                const iconMap = {};
-                const refs = responseData.refs || [];
-                refs.forEach(cat => {
-                    if (cat.name && cat.icon_url) {
-                        iconMap[cat.name] = cat.icon_url;
-                    }
-                });
-
-                document.getElementById('loading').style.display = 'none';
-                initMap(restaurants, iconMap);
-
-            } catch (error) {
-                document.getElementById('loading').innerHTML = `⚠️ 發生錯誤：<br>${error.message}`;
-                console.error(error);
+            } catch (err) {
+                alert("錯誤: " + err.message);
             }
         }
 
-        // [新增] 模糊匹配圖示函式
-        function getFuzzyIconUrl(categoryName, iconMap) {
-            if (!categoryName) return DEFAULT_ICON;
+        async function fetchData(userId) {
+            const url = `${CONFIG.API_GET}?line_user_id=${userId}&t=${Date.now()}`;
+            const res = await fetch(url);
+            const json = await res.json();
+            
+            allData = json.items || [];
+            
+            // 建立圖示表
+            const refs = json.refs || [];
+            refs.forEach(r => { if (r.name) iconMap[r.name] = r.icon_url; });
+        }
 
-            // 1. 嘗試完全匹配 (最快)
-            // e.g. "拉麵" == "拉麵"
-            if (iconMap[categoryName]) {
-                return iconMap[categoryName];
-            }
-
-            // 2. 嘗試模糊包含匹配
-            // e.g. "高空酒吧" 包含 "酒吧" -> 命中
-            // 遍歷所有已知的圖示 Key
-            const keys = Object.keys(iconMap);
-            for (const key of keys) {
-                if (categoryName.includes(key)) {
-                    return iconMap[key];
-                }
-            }
-
-            // 3. 都沒找到，回傳預設圖
+        // ==========================================
+        // 3. 地圖邏輯
+        // ==========================================
+        function getFuzzyIcon(cat) {
+            if (!cat) return DEFAULT_ICON;
+            if (iconMap[cat]) return iconMap[cat];
+            for (let k in iconMap) { if (cat.includes(k)) return iconMap[k]; }
             return DEFAULT_ICON;
         }
 
-        function initMap(restaurants, iconMap) {
+        function initMap() {
             let center = { lat: 25.0478, lng: 121.5170 };
-            
-            if (restaurants.length > 0 && restaurants[0].location && restaurants[0].location.data) {
-                center = {
-                    lat: restaurants[0].location.data.lat,
-                    lng: restaurants[0].location.data.lng
-                };
+            if (allData.length > 0 && allData[0].location?.data) {
+                center = allData[0].location.data;
             }
 
             const map = new google.maps.Map(document.getElementById("map"), {
-                zoom: 14,
-                center: center,
-                mapTypeControl: false,
-                streetViewControl: false,
-                fullscreenControl: false,
-                clickableIcons: false,
-                styles: [
-                    { featureType: "poi", elementType: "labels", stylers: [{ visibility: "off" }] }
-                ]
+                zoom: 14, center: center,
+                mapTypeControl: false, streetViewControl: false, fullscreenControl: false, clickableIcons: false
             });
 
             const infoWindow = new google.maps.InfoWindow();
 
-            restaurants.forEach(store => {
-                if (!store.location || !store.location.data || !store.location.data.lat) return;
-
-                const categoryName = store.category || "";
-                
-                // [修改] 改用模糊匹配函式
-                const iconUrl = getFuzzyIconUrl(categoryName, iconMap);
-
-                const customIcon = {
-                    url: iconUrl,
-                    scaledSize: new google.maps.Size(48, 48),
-                    origin: new google.maps.Point(0, 0),
-                    anchor: new google.maps.Point(24, 24)
-                };
-
-                const position = { 
-                    lat: store.location.data.lat, 
-                    lng: store.location.data.lng 
-                };
+            allData.forEach(store => {
+                if (!store.location?.data) return;
 
                 const marker = new google.maps.Marker({
-                    position: position, 
+                    position: store.location.data,
                     map: map,
                     title: store.name,
-                    icon: customIcon
+                    icon: {
+                        url: getFuzzyIcon(store.category),
+                        scaledSize: new google.maps.Size(48, 48),
+                        anchor: new google.maps.Point(24, 24)
+                    }
                 });
 
                 marker.addListener("click", () => {
-                    const bgImage = store.cover_image || 'https://images.unsplash.com/photo-1555396273-367ea4eb4db5?w=400';
+                    // 地圖上的資訊卡
+                    const isCashOnly = store.payment_methods?.includes("💰 只收現金");
+                    const alertHtml = isCashOnly ? `<div style="color:#d9534f;font-weight:bold;font-size:12px;margin-top:4px;">⚠️ 只收現金</div>` : "";
                     
                     const content = `
-                        <div style="padding:0; max-width:240px; font-family: sans-serif;">
-                            <div style="
-                                height:120px; width:100%; 
-                                background-image:url('${bgImage}'); 
-                                background-size:cover; background-position:center; 
-                                border-radius:6px 6px 0 0; margin-bottom:10px;">
-                            </div>
-                            <div style="padding: 0 10px 10px 10px;">
-                                <h3 style="margin:0 0 5px 0; font-size:16px; color:#333;">${store.name}</h3>
-                                <p style="margin:0 0 10px 0; color:#888; font-size:12px;">
-                                    <span style="color:#FF6B6B; font-weight:bold;">${store.category || '美食'}</span>
-                                </p>
-                                <a href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(store.name)}" 
-                                   target="_blank" 
-                                   style="
-                                     display:block; text-align:center; 
-                                     background:#FF6B6B; color:white; 
-                                     text-decoration:none; padding:8px 0; 
-                                     border-radius:4px; font-size:14px; font-weight:bold; box-shadow: 0 2px 4px rgba(0,0,0,0.2);">
-                                   📍 導航去這
-                                </a>
-                            </div>
+                        <div style="padding:5px; max-width:200px;">
+                            <h3 style="margin:0 0 5px 0;">${store.name}</h3>
+                            <div style="font-size:12px; color:#666; margin-bottom:8px;">${store.category || '美食'}</div>
+                            ${alertHtml}
+                            <a href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(store.name)}" target="_blank" style="display:block;margin-top:8px;color:#FF6B6B;font-weight:bold;text-decoration:none;">📍 導航去這</a>
                         </div>
                     `;
                     infoWindow.setContent(content);
                     infoWindow.open(map, marker);
                 });
             });
-
-            setupMyLocation(map);
-        }
-
-        function setupMyLocation(map) {
-            const locationBtn = document.getElementById("locationButton");
-            locationBtn.style.display = "flex";
-
-            const userIcon = {
-                path: google.maps.SymbolPath.CIRCLE,
-                fillColor: '#4285F4',
-                fillOpacity: 1,
-                scale: 7,
-                strokeColor: 'white',
-                strokeWeight: 2,
-                strokeOpacity: 1
-            };
             
-            let userMarker = null;
-            let accuracyCircle = null;
-
-            const goToMyLocation = () => {
-                if (navigator.geolocation) {
-                    navigator.geolocation.getCurrentPosition(
-                        (position) => {
-                            const pos = {
-                                lat: position.coords.latitude,
-                                lng: position.coords.longitude,
-                            };
-
-                            if (accuracyCircle) accuracyCircle.setMap(null);
-
-                            if (!userMarker) {
-                                userMarker = new google.maps.Marker({
-                                    position: pos,
-                                    map: map,
-                                    icon: userIcon,
-                                    title: "您的位置",
-                                    zIndex: 999
-                                });
-                            } else {
-                                userMarker.setPosition(pos);
-                            }
-
-                            accuracyCircle = new google.maps.Circle({
-                                strokeColor: "#4285F4",
-                                strokeOpacity: 0.2,
-                                strokeWeight: 1,
-                                fillColor: "#4285F4",
-                                fillOpacity: 0.1,
-                                map: map,
-                                center: pos,
-                                radius: position.coords.accuracy || 50
-                            });
-
-                            map.setCenter(pos);
-                            map.setZoom(15);
-                        },
-                        (error) => { console.error("定位失敗:", error); },
-                        { enableHighAccuracy: true }
-                    );
+            // 啟動定位 (簡化版)
+            const btn = document.getElementById("locationButton");
+            btn.style.display = 'flex';
+            btn.onclick = () => {
+                if(navigator.geolocation) {
+                    navigator.geolocation.getCurrentPosition(pos => {
+                        const p = {lat: pos.coords.latitude, lng: pos.coords.longitude};
+                        map.setCenter(p);
+                        new google.maps.Marker({position: p, map: map, icon: { path: google.maps.SymbolPath.CIRCLE, scale: 6, fillColor: '#4285F4', fillOpacity: 1, strokeColor: 'white', strokeWeight: 2}});
+                    });
                 }
             };
-
-            locationBtn.addEventListener("click", goToMyLocation);
-            goToMyLocation();
         }
+
+        // ==========================================
+        // 4. 列表與編輯邏輯
+        // ==========================================
+        function renderList() {
+            const container = document.getElementById('list-container');
+            container.innerHTML = "";
+
+            allData.forEach(item => {
+                const isVisited = item.visited === true;
+                const rating = item.user_rating ? `⭐ ${item.user_rating}` : "";
+                const cashOnly = item.payment_methods?.includes("💰 只收現金");
+
+                const el = document.createElement('div');
+                el.className = 'journal-card';
+                el.innerHTML = `
+                    <div class="card-header">
+                        <div class="card-title">${item.name}</div>
+                        <div style="font-weight:bold; color:#FF6B6B;">${rating}</div>
+                    </div>
+                    <div class="card-info">📍 ${item.address || '無地址'}</div>
+                    <div class="card-info">📂 ${item.category || '未分類'}</div>
+                    <div class="card-badges" style="margin-top:8px;">
+                        ${isVisited ? '<span class="badge visited">✅ 已造訪</span>' : '<span class="badge">📍 想去</span>'}
+                        ${cashOnly ? '<span class="badge cash-only">💰 只收現金</span>' : ''}
+                    </div>
+                    <div class="card-review" style="margin-top:8px; color:#555;">${item.user_review || '(點擊撰寫筆記...)'}</div>
+                `;
+                el.onclick = () => openEditModal(item);
+                container.appendChild(el);
+            });
+        }
+
+        // 開啟彈窗
+        function openEditModal(item) {
+            const dialog = document.getElementById('editDialog');
+            document.getElementById('dialogTitle').innerText = item.name;
+            document.getElementById('input_id').value = item.id;
+            
+            // 填入既有資料
+            document.getElementById('input_visited').checked = item.visited || false;
+            setRating(item.user_rating || 0);
+            document.getElementById('input_review').value = item.user_review || "";
+            document.getElementById('input_spend').value = item.avg_spend || "";
+            // 日期處理：Xano timestamp 通常是毫秒，input date 需要 YYYY-MM-DD
+            if (item.visit_date) {
+                const d = new Date(item.visit_date);
+                document.getElementById('input_date').value = d.toISOString().split('T')[0];
+            } else {
+                document.getElementById('input_date').value = new Date().toISOString().split('T')[0];
+            }
+
+            // 生成 Chips
+            renderChips('chips_payment', TAG_OPTIONS.payment, item.payment_methods);
+            renderChips('chips_companions', TAG_OPTIONS.companions, item.companions);
+            renderChips('chips_tags', TAG_OPTIONS.tags, item.dining_tags);
+
+            dialog.showModal();
+        }
+
+        function closeModal() {
+            document.getElementById('editDialog').close();
+        }
+
+        // 渲染多選標籤
+        function renderChips(containerId, options, selectedValues = []) {
+            const container = document.getElementById(containerId);
+            container.innerHTML = "";
+            options.forEach(opt => {
+                const chip = document.createElement('div');
+                chip.className = 'chip';
+                if (selectedValues.includes(opt)) chip.classList.add('selected');
+                chip.innerText = opt;
+                chip.onclick = () => chip.classList.toggle('selected');
+                container.appendChild(chip);
+            });
+        }
+
+        // 星星評分邏輯
+        function setRating(val) {
+            document.getElementById('input_rating').value = val;
+            document.querySelectorAll('#starContainer span').forEach((span, idx) => {
+                span.classList.toggle('active', idx < val);
+            });
+        }
+        document.querySelectorAll('#starContainer span').forEach((span, idx) => {
+            span.onclick = () => setRating(idx + 1);
+        });
+
+        // 送出表單
+        async function submitForm() {
+            const btn = document.getElementById('saveBtn');
+            btn.disabled = true;
+            btn.innerText = "儲存中...";
+
+            const id = document.getElementById('input_id').value;
+            
+            // 收集 Chips 資料
+            const getSelected = (id) => Array.from(document.querySelectorAll(`#${id} .chip.selected`)).map(c => c.innerText);
+
+            const payload = {
+                restaurant_id: parseInt(id),
+                visited: document.getElementById('input_visited').checked,
+                user_rating: parseInt(document.getElementById('input_rating').value),
+                user_review: document.getElementById('input_review').value,
+                avg_spend: parseInt(document.getElementById('input_spend').value) || 0,
+                // 把日期轉回 Timestamp (毫秒)
+                visit_date: new Date(document.getElementById('input_date').value).getTime(),
+                payment_methods: getSelected('chips_payment'),
+                companions: getSelected('chips_companions'),
+                dining_tags: getSelected('chips_tags')
+            };
+
+            try {
+                const res = await fetch(CONFIG.API_UPDATE, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+
+                if (!res.ok) throw new Error("更新失敗");
+
+                alert("儲存成功！");
+                closeModal();
+                // 重新整理頁面或重抓資料
+                location.reload(); 
+
+            } catch (err) {
+                alert("錯誤: " + err.message);
+                btn.disabled = false;
+                btn.innerText = "儲存更新";
+            }
+        }
+
     </script>
-    
     <script>
         const script = document.createElement('script');
         script.src = `https://maps.googleapis.com/maps/api/js?key=${CONFIG.GOOGLE_MAPS_KEY}&callback=main`;
