@@ -10,24 +10,27 @@
         
         #map { height: 100%; width: 100%; }
         
-        /* 載入畫面 */
+        /* [修正] 載入畫面樣式 */
         .loading { 
             position: absolute; top: 50%; left: 50%; 
             transform: translate(-50%, -50%); 
             color: #666; font-size: 14px;
             background: rgba(255,255,255,0.95);
-            padding: 20px 30px; border-radius: 12px;
+            padding: 20px 40px; /* 加寬左右 padding */
+            border-radius: 12px;
             box-shadow: 0 4px 15px rgba(0,0,0,0.1);
             z-index: 100;
             display: flex; flex-direction: column; align-items: center;
             font-weight: bold;
+            white-space: nowrap; /* [關鍵] 強制文字不換行 */
+            min-width: 200px;    /* [關鍵] 設定最小寬度 */
         }
 
-        /* 定位按鈕 (仿 Google Maps 原生樣式) */
+        /* 定位按鈕 */
         #locationButton {
             display: none;
             position: absolute; 
-            bottom: 120px; /* 避開右下角的 Google Logo */
+            bottom: 120px; 
             right: 16px; 
             z-index: 5;
             background: white;
@@ -55,7 +58,7 @@
 
     <script>
         // ==========================================
-        // 1. 設定檔 (已更新)
+        // 1. 設定檔 (請填入你的 Key)
         // ==========================================
         const CONFIG = {
             LIFF_ID: "2008587350-Nba5PAbR",
@@ -63,7 +66,6 @@
             GOOGLE_MAPS_KEY: "AIzaSyBxA02Disbhv_kHeJ8OlTF2rCOTmXTqN1E"
         };
 
-        // 預設圖示 (當找不到分類圖示時使用)
         const DEFAULT_ICON = "https://res.cloudinary.com/dtlxflkkb/image/upload/v1764438323/location-pin_wjwvj6.png";
 
         // ==========================================
@@ -72,7 +74,6 @@
         
         async function main() {
             try {
-                // 初始化 LIFF
                 await liff.init({ liffId: CONFIG.LIFF_ID });
 
                 if (!liff.isLoggedIn()) {
@@ -82,10 +83,8 @@
 
                 const profile = await liff.getProfile();
                 const userId = profile.userId;
-                
                 console.log("User ID:", userId);
 
-                // 呼叫 Xano API (加入 timestamp 避免快取)
                 const apiUrl = `${CONFIG.XANO_API}?line_user_id=${userId}&t=${new Date().getTime()}`;
                 const response = await fetch(apiUrl);
                 
@@ -93,25 +92,18 @@
                 
                 const responseData = await response.json();
                 
-                // --- [關鍵邏輯] Side-loading 組裝 ---
-                
-                // 1. 取出餐廳列表 (items)
+                // --- Side-loading 組裝 ---
                 const restaurants = responseData.items || [];
                 
-                // 2. 取出分類參照表 (refs) 並建立查找表 (Map)
+                // 建立圖示查找表
                 const iconMap = {};
                 const refs = responseData.refs || [];
-                
                 refs.forEach(cat => {
-                    // 建立對照: "拉麵" -> "https://..."
                     if (cat.name && cat.icon_url) {
                         iconMap[cat.name] = cat.icon_url;
                     }
                 });
 
-                console.log("Icon Map 建立完成:", iconMap);
-                
-                // 3. 開始畫地圖
                 document.getElementById('loading').style.display = 'none';
                 initMap(restaurants, iconMap);
 
@@ -121,13 +113,33 @@
             }
         }
 
-        function initMap(restaurants, iconMap) {
-            console.log(`共載入 ${restaurants.length} 間餐廳`);
+        // [新增] 模糊匹配圖示函式
+        function getFuzzyIconUrl(categoryName, iconMap) {
+            if (!categoryName) return DEFAULT_ICON;
 
-            // 預設中心點 (台北)
+            // 1. 嘗試完全匹配 (最快)
+            // e.g. "拉麵" == "拉麵"
+            if (iconMap[categoryName]) {
+                return iconMap[categoryName];
+            }
+
+            // 2. 嘗試模糊包含匹配
+            // e.g. "高空酒吧" 包含 "酒吧" -> 命中
+            // 遍歷所有已知的圖示 Key
+            const keys = Object.keys(iconMap);
+            for (const key of keys) {
+                if (categoryName.includes(key)) {
+                    return iconMap[key];
+                }
+            }
+
+            // 3. 都沒找到，回傳預設圖
+            return DEFAULT_ICON;
+        }
+
+        function initMap(restaurants, iconMap) {
             let center = { lat: 25.0478, lng: 121.5170 };
             
-            // 如果有資料，以第一筆資料為中心
             if (restaurants.length > 0 && restaurants[0].location && restaurants[0].location.data) {
                 center = {
                     lat: restaurants[0].location.data.lat,
@@ -142,7 +154,6 @@
                 streetViewControl: false,
                 fullscreenControl: false,
                 clickableIcons: false,
-                // 加上樣式調整，讓地圖比較乾淨 (選用)
                 styles: [
                     { featureType: "poi", elementType: "labels", stylers: [{ visibility: "off" }] }
                 ]
@@ -150,21 +161,19 @@
 
             const infoWindow = new google.maps.InfoWindow();
 
-            // --- 撒點迴圈 ---
             restaurants.forEach(store => {
-                // 防呆：確認有座標
                 if (!store.location || !store.location.data || !store.location.data.lat) return;
 
-                // [關鍵邏輯] 決定圖示
-                // 拿 store.category (文字) 去查 iconMap
                 const categoryName = store.category || "";
-                const iconUrl = iconMap[categoryName] ? iconMap[categoryName] : DEFAULT_ICON;
+                
+                // [修改] 改用模糊匹配函式
+                const iconUrl = getFuzzyIconUrl(categoryName, iconMap);
 
                 const customIcon = {
                     url: iconUrl,
-                    scaledSize: new google.maps.Size(48, 48), // 設定顯示大小
+                    scaledSize: new google.maps.Size(48, 48),
                     origin: new google.maps.Point(0, 0),
-                    anchor: new google.maps.Point(24, 24)     // 中心點
+                    anchor: new google.maps.Point(24, 24)
                 };
 
                 const position = { 
@@ -176,12 +185,10 @@
                     position: position, 
                     map: map,
                     title: store.name,
-                    icon: customIcon // 套用圖示
+                    icon: customIcon
                 });
 
-                // 點擊事件 (Info Window)
                 marker.addListener("click", () => {
-                    // 預設封面圖
                     const bgImage = store.cover_image || 'https://images.unsplash.com/photo-1555396273-367ea4eb4db5?w=400';
                     
                     const content = `
@@ -214,11 +221,9 @@
                 });
             });
 
-            // 啟動使用者定位
             setupMyLocation(map);
         }
 
-        // 使用者定位功能 (藍點 + 按鈕)
         function setupMyLocation(map) {
             const locationBtn = document.getElementById("locationButton");
             locationBtn.style.display = "flex";
@@ -273,16 +278,14 @@
                             map.setCenter(pos);
                             map.setZoom(15);
                         },
-                        (error) => {
-                            console.error("定位失敗:", error);
-                        },
+                        (error) => { console.error("定位失敗:", error); },
                         { enableHighAccuracy: true }
                     );
                 }
             };
 
             locationBtn.addEventListener("click", goToMyLocation);
-            goToMyLocation(); // 載入時自動定位
+            goToMyLocation();
         }
     </script>
     
