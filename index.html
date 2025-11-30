@@ -132,6 +132,40 @@
         /* Checkbox 樣式優化 */
         .custom-checkbox { display: flex; align-items: center; cursor: pointer; font-size: 15px; font-weight: 500; }
         .custom-checkbox input { width: 20px; height: 20px; margin-right: 10px; accent-color: var(--primary); }
+
+        /* --- 分類網格視圖 --- */
+        #category-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr); /* 兩列 */
+            gap: 12px;
+            padding-bottom: 20px;
+        }
+        
+        .category-card {
+            background: white;
+            border-radius: 12px;
+            padding: 20px;
+            text-align: center;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+            cursor: pointer;
+            transition: transform 0.1s, border 0.1s;
+            border: 1px solid transparent;
+        }
+        .category-card:active { transform: scale(0.96); background: #fafafa; }
+        .category-card.active { border-color: var(--primary); background: #FFF5F5; }
+        
+        .cat-icon { width: 48px; height: 48px; object-fit: contain; margin-bottom: 10px; }
+        .cat-name { font-weight: bold; color: #333; font-size: 15px; margin-bottom: 4px; }
+        .cat-count { font-size: 12px; color: #888; }
+        
+        /* 列表頁的標頭導航 */
+        .list-header {
+            display: flex; align-items: center; gap: 10px; margin-bottom: 15px;
+        }
+        .back-btn {
+            font-size: 20px; cursor: pointer; padding: 5px 10px; 
+            background: white; border-radius: 8px; border: 1px solid #eee;
+        }
     </style>
 </head>
 <body>
@@ -146,8 +180,20 @@
     </div>
 
     <div id="list-view">
-        <div style="margin-bottom: 15px; font-weight: bold; font-size: 20px; color: #222;">我的美食手帳</div>
+    
+    <div id="category-layer">
+        <div style="margin-bottom: 15px; font-weight: bold; font-size: 20px; color: #222;">我的美食分類</div>
+        <div id="category-grid"></div>
+    </div>
+
+    <div id="restaurant-layer" style="display:none;">
+        <div class="list-header">
+            <div class="back-btn" onclick="showCategoryLayer()">⬅️</div>
+            <div style="font-weight: bold; font-size: 18px;" id="list-title">所有餐廳</div>
+        </div>
         <div id="list-container"></div>
+    </div>
+
     </div>
 
     <div class="bottom-nav">
@@ -263,11 +309,11 @@
                 
                 switchTab(initialView);
                 await fetchData(userId);
-
                 document.getElementById('loading').style.display = 'none';
                 
                 initMap();
-                renderList();
+                renderCategories(); // 先畫分類頁
+                // renderList();
 
             } catch (err) {
                 alert("錯誤: " + err.message);
@@ -304,6 +350,112 @@
                 navMap.classList.remove('active');
                 navList.classList.add('active');
             }
+        }
+
+        // ==========================================
+        // 4. 列表與分類邏輯 (大幅更新)
+        // ==========================================
+        
+        // [新增] 渲染分類頁面
+        function renderCategories() {
+            const grid = document.getElementById('category-grid');
+            grid.innerHTML = "";
+        
+            // 1. 統計分類數量
+            const stats = {};
+            allData.forEach(item => {
+                const cat = item.category || "未分類";
+                if (!stats[cat]) stats[cat] = 0;
+                stats[cat]++;
+            });
+        
+            // 2. 加上 "全部" 選項
+            const allCard = createCategoryCard("全部", allData.length, "https://img.icons8.com/fluency/48/restaurant.png");
+            allCard.onclick = () => showRestaurantLayer("全部");
+            grid.appendChild(allCard);
+        
+            // 3. 渲染其他分類 (按數量排序)
+            Object.keys(stats)
+                .sort((a, b) => stats[b] - stats[a])
+                .forEach(cat => {
+                    // 使用 iconMap 取得對應圖示
+                    const iconUrl = getFuzzyIcon(cat); 
+                    const card = createCategoryCard(cat, stats[cat], iconUrl);
+                    card.onclick = () => showRestaurantLayer(cat);
+                    grid.appendChild(card);
+                });
+        }
+        
+        // [輔助] 建立單張分類卡片 HTML
+        function createCategoryCard(name, count, icon) {
+            const el = document.createElement('div');
+            el.className = 'category-card';
+            el.innerHTML = `
+                <img src="${icon}" class="cat-icon">
+                <div class="cat-name">${name}</div>
+                <div class="cat-count">${count} 間</div>
+            `;
+            return el;
+        }
+        
+        // [新增] 切換到列表層
+        function showRestaurantLayer(category) {
+            document.getElementById('category-layer').style.display = 'none';
+            document.getElementById('restaurant-layer').style.display = 'block';
+            document.getElementById('list-title').innerText = category;
+            
+            // 呼叫 renderList 並傳入篩選條件
+            renderList(category);
+        }
+        
+        // [新增] 切換回分類層 (Back 按鈕用)
+        function showCategoryLayer() {
+            document.getElementById('restaurant-layer').style.display = 'none';
+            document.getElementById('category-layer').style.display = 'block';
+        }
+        
+        // [修改] 渲染列表 (支援篩選)
+        function renderList(filterCategory = "全部") {
+            const container = document.getElementById('list-container');
+            container.innerHTML = "";
+        
+            // 過濾資料
+            const filteredData = allData.filter(item => {
+                if (filterCategory === "全部") return true;
+                const itemCat = item.category || "未分類";
+                return itemCat === filterCategory;
+            });
+        
+            if (filteredData.length === 0) {
+                container.innerHTML = `<div style="text-align:center; color:#999; margin-top:50px;">這裡沒有餐廳</div>`;
+                return;
+            }
+        
+            filteredData.forEach(item => {
+                // ... (原本產生 journal-card 的代碼完全不變) ...
+                const isVisited = item.visited === true;
+                const rating = item.user_rating ? `⭐ ${item.user_rating}` : "";
+                const cashOnly = item.payment_methods?.includes("💰 只收現金");
+        
+                const el = document.createElement('div');
+                el.className = 'journal-card';
+                // ... (HTML 結構同前) ...
+                el.innerHTML = `
+                    <div class="card-header">
+                        <div class="card-title">${item.name}</div>
+                        <div style="font-weight:bold; color:#FF6B6B;">${rating}</div>
+                    </div>
+                    <div class="card-info">📍 ${item.address || '無地址'}</div>
+                    <div class="card-info">📂 ${item.category || '未分類'}</div>
+                    <div class="card-badges" style="margin-top:8px;">
+                        ${isVisited ? '<span class="badge visited">✅ 已造訪</span>' : '<span class="badge">📍 想去</span>'}
+                        ${cashOnly ? '<span class="badge cash-only">💰 只收現金</span>' : ''}
+                    </div>
+                    <div class="card-review" style="margin-top:8px; color:#555;">${item.user_review || '(點擊撰寫筆記...)'}</div>
+                `;
+                el.onclick = () => openEditModal(item);
+                container.appendChild(el);
+            });
         }
 
         // ==========================================
