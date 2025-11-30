@@ -566,16 +566,113 @@
         }
 
         // ==========================================
-        // 列表與編輯邏輯
+        // 4. 列表與分類邏輯 (邏輯一致性修正版)
         // ==========================================
-        function renderList() {
+
+        // [核心輔助函式] 統一取得分類名稱
+        // 無論是統計還是篩選，都必須呼叫這個，確保結果一致
+        function getCategoryName(item) {
+            if (!item || !item.category) return "未分類";
+            
+            // 如果是物件 (Addon) 取 name，如果是字串直接用
+            let name = (typeof item.category === 'object') ? item.category.name : String(item.category);
+            
+            // 強制轉字串並去空白
+            return name ? name.trim() : "未分類";
+        }
+
+        // 1. 渲染分類網格
+        function renderCategories() {
+            const grid = document.getElementById('category-grid');
+            grid.innerHTML = "";
+
+            // 統計數量
+            const stats = {};
+            
+            allData.forEach(item => {
+                // ✅ 使用統一函式取得名稱
+                const catName = getCategoryName(item);
+                
+                if (!stats[catName]) stats[catName] = 0;
+                stats[catName]++;
+            });
+
+            // 建立 "全部" 卡片
+            const allCard = createCategoryCard("全部", allData.length, "https://img.icons8.com/fluency/48/restaurant.png");
+            allCard.onclick = () => showRestaurantLayer("全部");
+            grid.appendChild(allCard);
+
+            // 建立其他分類卡片
+            // 按數量排序
+            Object.keys(stats).sort((a, b) => stats[b] - stats[a]).forEach(cat => {
+                const iconUrl = getFuzzyIcon(cat); 
+                const card = createCategoryCard(cat, stats[cat], iconUrl);
+                
+                // ✅ 這裡傳進去的 cat，就是上面 getCategoryName 產生的結果
+                card.onclick = () => showRestaurantLayer(cat);
+                
+                grid.appendChild(card);
+            });
+        }
+
+        function createCategoryCard(name, count, icon) {
+            const el = document.createElement('div');
+            el.className = 'category-card';
+            el.innerHTML = `
+                <img src="${icon}" class="cat-icon">
+                <div class="cat-name">${name}</div>
+                <div class="cat-count">${count} 間</div>
+            `;
+            return el;
+        }
+
+        // 2. 切換到列表層
+        function showRestaurantLayer(categoryName) {
+            // console.log("準備切換分類:", categoryName); 
+            document.getElementById('category-layer').style.display = 'none';
+            document.getElementById('restaurant-layer').style.display = 'block';
+            document.getElementById('list-title').innerText = categoryName;
+            
+            renderList(categoryName);
+        }
+
+        function showCategoryLayer() {
+            document.getElementById('restaurant-layer').style.display = 'none';
+            document.getElementById('category-layer').style.display = 'block';
+        }
+
+        // 3. 渲染列表
+        function renderList(targetCategory) {
             const container = document.getElementById('list-container');
             container.innerHTML = "";
 
-            allData.forEach(item => {
+            // console.log("目標分類:", targetCategory);
+
+            // 過濾資料
+            const filteredData = allData.filter(item => {
+                // 如果目標是 "全部"，回傳 true
+                if (targetCategory === "全部") return true;
+
+                // ✅ 使用同一支函式取得名稱，保證能對上
+                const itemCat = getCategoryName(item);
+                
+                // console.log(`比對: ${itemCat} === ${targetCategory}`); // 除錯用
+                return itemCat === targetCategory;
+            });
+
+            if (filteredData.length === 0) {
+                container.innerHTML = `<div style="text-align:center; color:#999; margin-top:50px;">此分類沒有餐廳</div>`;
+                return;
+            }
+
+            filteredData.forEach(item => {
                 const isVisited = item.visited === true;
                 const rating = item.user_rating ? `⭐ ${item.user_rating}` : "";
                 const cashOnly = item.payment_methods?.includes("💰 只收現金");
+                
+                // 顯示用的變數
+                const addressText = item.address || "無地址";
+                const categoryText = getCategoryName(item); // 這裡也統一用函式顯示
 
                 const el = document.createElement('div');
                 el.className = 'journal-card';
@@ -584,101 +681,17 @@
                         <div class="card-title">${item.name}</div>
                         <div style="font-weight:bold; color:#FF6B6B;">${rating}</div>
                     </div>
-                    <div class="card-info">📍 ${item.address || '無地址'}</div>
-                    <div class="card-info">📂 ${item.category || '未分類'}</div>
-                    <div class="card-badges">
+                    <div class="card-info">📍 ${addressText}</div>
+                    <div class="card-info">📂 ${categoryText}</div>
+                    <div class="card-badges" style="margin-top:8px;">
                         ${isVisited ? '<span class="badge visited">✅ 已造訪</span>' : '<span class="badge">📍 想去</span>'}
                         ${cashOnly ? '<span class="badge cash-only">💰 只收現金</span>' : ''}
                     </div>
-                    <div class="card-review">${item.user_review || '(點擊撰寫筆記...)'}</div>
+                    <div class="card-review">${item.user_review || '<span style="color:#ccc; font-style:italic;">點擊撰寫筆記...</span>'}</div>
                 `;
                 el.onclick = () => openEditModal(item);
                 container.appendChild(el);
             });
-        }
-
-        function openEditModal(item) {
-            const dialog = document.getElementById('editDialog');
-            document.getElementById('dialogTitle').innerText = item.name;
-            document.getElementById('input_id').value = item.id;
-            
-            document.getElementById('input_visited').checked = item.visited || false;
-            setRating(item.user_rating || 0);
-            document.getElementById('input_review').value = item.user_review || "";
-            document.getElementById('input_spend').value = item.avg_spend || "";
-            
-            if (item.visit_date) {
-                const d = new Date(item.visit_date);
-                document.getElementById('input_date').value = d.toISOString().split('T')[0];
-            } else {
-                document.getElementById('input_date').value = new Date().toISOString().split('T')[0];
-            }
-
-            renderChips('chips_payment', TAG_OPTIONS.payment, item.payment_methods);
-            renderChips('chips_companions', TAG_OPTIONS.companions, item.companions);
-            renderChips('chips_tags', TAG_OPTIONS.tags, item.dining_tags);
-
-            dialog.showModal();
-        }
-
-        function closeModal() { document.getElementById('editDialog').close(); }
-
-        function renderChips(containerId, options, selectedValues = []) {
-            const container = document.getElementById(containerId);
-            container.innerHTML = "";
-            options.forEach(opt => {
-                const chip = document.createElement('div');
-                chip.className = 'chip';
-                if (selectedValues && selectedValues.includes(opt)) chip.classList.add('selected');
-                chip.innerText = opt;
-                chip.onclick = () => chip.classList.toggle('selected');
-                container.appendChild(chip);
-            });
-        }
-
-        function setRating(val) {
-            document.getElementById('input_rating').value = val;
-            document.querySelectorAll('#starContainer span').forEach((span, idx) => {
-                span.classList.toggle('active', idx < val);
-            });
-        }
-        document.querySelectorAll('#starContainer span').forEach((span, idx) => {
-            span.onclick = () => setRating(idx + 1);
-        });
-
-        async function submitForm() {
-            const btn = document.getElementById('saveBtn');
-            btn.disabled = true; btn.innerText = "儲存中...";
-
-            const id = document.getElementById('input_id').value;
-            const getSelected = (id) => Array.from(document.querySelectorAll(`#${id} .chip.selected`)).map(c => c.innerText);
-
-            const payload = {
-                restaurant_id: parseInt(id),
-                visited: document.getElementById('input_visited').checked,
-                user_rating: parseInt(document.getElementById('input_rating').value),
-                user_review: document.getElementById('input_review').value,
-                avg_spend: parseInt(document.getElementById('input_spend').value) || 0,
-                visit_date: new Date(document.getElementById('input_date').value).getTime(),
-                payment_methods: getSelected('chips_payment'),
-                companions: getSelected('chips_companions'),
-                dining_tags: getSelected('chips_tags')
-            };
-
-            try {
-                const res = await fetch(CONFIG.API_UPDATE, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(payload)
-                });
-                if (!res.ok) throw new Error("更新失敗");
-                alert("儲存成功！");
-                closeModal();
-                location.reload(); 
-            } catch (err) {
-                alert("錯誤: " + err.message);
-                btn.disabled = false; btn.innerText = "儲存更新";
-            }
         }
     </script>
     
