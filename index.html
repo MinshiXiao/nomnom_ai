@@ -364,9 +364,13 @@
             // 1. 統計分類數量
             const stats = {};
             allData.forEach(item => {
-                const cat = item.category || "未分類";
-                if (!stats[cat]) stats[cat] = 0;
-                stats[cat]++;
+                // [關鍵修正] 強制轉字串並去空白，確保 Key 乾淨
+                // 如果 category 是 null，就歸類為 "未分類"
+                const rawCat = item.category ? String(item.category) : "未分類";
+                const catName = rawCat.trim();
+                
+                if (!stats[catName]) stats[catName] = 0;
+                stats[catName]++;
             });
         
             // 2. 加上 "全部" 選項
@@ -381,7 +385,9 @@
                     // 使用 iconMap 取得對應圖示
                     const iconUrl = getFuzzyIcon(cat); 
                     const card = createCategoryCard(cat, stats[cat], iconUrl);
-                    card.onclick = () => showRestaurantLayer(cat);
+                    card.onclick = function() {
+                    showRestaurantLayer(cat);
+                    };
                     grid.appendChild(card);
                 });
         }
@@ -414,39 +420,49 @@
             document.getElementById('category-layer').style.display = 'block';
         }
         
-        // [修改] 渲染列表 (支援篩選)
-        function renderList(filterCategory = "全部") {
+        // 3. 渲染列表 (含強力篩選邏輯)
+        function renderList(targetCategory) {
             const container = document.getElementById('list-container');
             container.innerHTML = "";
-        
-            // 過濾資料
+
+            // console.log("正在篩選:", targetCategory); // 除錯用
+
+            // [關鍵修正] 過濾邏輯
             const filteredData = allData.filter(item => {
-                if (filterCategory === "全部") return true;
-                const itemCat = item.category || "未分類";
-                return itemCat === filterCategory;
+                // 如果是 "全部"，直接通過
+                if (targetCategory === "全部") return true;
+
+                // 處理每一筆資料的 category，邏輯必須跟 renderCategories 完全一樣
+                const rawCat = item.category ? String(item.category) : "未分類";
+                const itemCat = rawCat.trim();
+                
+                // 比對 (皆為字串且已去空白)
+                return itemCat === targetCategory;
             });
-        
+
+            // 處理空資料
             if (filteredData.length === 0) {
-                container.innerHTML = `<div style="text-align:center; color:#999; margin-top:50px;">這裡沒有餐廳</div>`;
+                container.innerHTML = `<div style="text-align:center; color:#999; margin-top:50px;">此分類沒有餐廳</div>`;
                 return;
             }
         
+            // 渲染卡片
             filteredData.forEach(item => {
-                // ... (原本產生 journal-card 的代碼完全不變) ...
                 const isVisited = item.visited === true;
                 const rating = item.user_rating ? `⭐ ${item.user_rating}` : "";
                 const cashOnly = item.payment_methods?.includes("💰 只收現金");
-        
+                const addressText = item.address || "無地址";
+                const categoryText = item.category || "未分類";
+
                 const el = document.createElement('div');
                 el.className = 'journal-card';
-                // ... (HTML 結構同前) ...
                 el.innerHTML = `
                     <div class="card-header">
                         <div class="card-title">${item.name}</div>
                         <div style="font-weight:bold; color:#FF6B6B;">${rating}</div>
                     </div>
-                    <div class="card-info">📍 ${item.address || '無地址'}</div>
-                    <div class="card-info">📂 ${item.category || '未分類'}</div>
+                    <div class="card-info">📍 ${addressText}</div>
+                    <div class="card-info">📂 ${categoryText}</div>
                     <div class="card-badges" style="margin-top:8px;">
                         ${isVisited ? '<span class="badge visited">✅ 已造訪</span>' : '<span class="badge">📍 想去</span>'}
                         ${cashOnly ? '<span class="badge cash-only">💰 只收現金</span>' : ''}
