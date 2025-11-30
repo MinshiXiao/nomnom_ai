@@ -482,6 +482,128 @@
         }
 
         // ==========================================
+        // 5. 編輯彈窗與表單邏輯 (補上這段)
+        // ==========================================
+
+        function openEditModal(item) {
+            const dialog = document.getElementById('editDialog');
+            document.getElementById('dialogTitle').innerText = item.name;
+            document.getElementById('input_id').value = item.id;
+            
+            // 填入既有資料 (防呆處理)
+            document.getElementById('input_visited').checked = item.visited || false;
+            setRating(item.user_rating || 0);
+            document.getElementById('input_review').value = item.user_review || "";
+            document.getElementById('input_spend').value = item.avg_spend || "";
+            
+            // 日期處理：轉成 YYYY-MM-DD
+            if (item.visit_date) {
+                const d = new Date(item.visit_date);
+                // 處理時區偏移，確保日期正確
+                const localDate = new Date(d.getTime() - (d.getTimezoneOffset() * 60000));
+                document.getElementById('input_date').value = localDate.toISOString().split('T')[0];
+            } else {
+                document.getElementById('input_date').value = new Date().toISOString().split('T')[0];
+            }
+
+            // 渲染 Chips
+            renderChips('chips_payment', TAG_OPTIONS.payment, item.payment_methods);
+            renderChips('chips_companions', TAG_OPTIONS.companions, item.companions);
+            renderChips('chips_tags', TAG_OPTIONS.tags, item.dining_tags);
+
+            dialog.showModal();
+        }
+
+        function closeModal() { 
+            document.getElementById('editDialog').close(); 
+        }
+
+        // 渲染多選標籤 (Chips)
+        function renderChips(containerId, options, selectedValues = []) {
+            const container = document.getElementById(containerId);
+            container.innerHTML = "";
+            options.forEach(opt => {
+                const chip = document.createElement('div');
+                chip.className = 'chip';
+                // 檢查是否已選取
+                if (selectedValues && selectedValues.includes(opt)) {
+                    chip.classList.add('selected');
+                }
+                chip.innerText = opt;
+                
+                // 點擊切換選取狀態
+                chip.onclick = () => chip.classList.toggle('selected');
+                
+                container.appendChild(chip);
+            });
+        }
+
+        // 星星評分邏輯
+        function setRating(val) {
+            document.getElementById('input_rating').value = val;
+            document.querySelectorAll('#starContainer span').forEach((span, idx) => {
+                span.classList.toggle('active', idx < val);
+            });
+        }
+        // 綁定星星點擊事件
+        document.querySelectorAll('#starContainer span').forEach((span, idx) => {
+            span.onclick = () => setRating(idx + 1);
+        });
+
+        // 送出表單
+        async function submitForm() {
+            const btn = document.getElementById('saveBtn');
+            btn.disabled = true; 
+            btn.innerText = "儲存中...";
+
+            const id = document.getElementById('input_id').value;
+            
+            // 收集 Chips 資料
+            const getSelected = (containerId) => {
+                return Array.from(document.querySelectorAll(`#${containerId} .chip.selected`))
+                            .map(c => c.innerText);
+            };
+
+            const payload = {
+                restaurant_id: parseInt(id),
+                visited: document.getElementById('input_visited').checked,
+                user_rating: parseInt(document.getElementById('input_rating').value),
+                user_review: document.getElementById('input_review').value,
+                avg_spend: parseInt(document.getElementById('input_spend').value) || 0,
+                visit_date: new Date(document.getElementById('input_date').value).getTime(),
+                payment_methods: getSelected('chips_payment'),
+                companions: getSelected('chips_companions'),
+                dining_tags: getSelected('chips_tags')
+            };
+
+            try {
+                const res = await fetch(CONFIG.API_UPDATE, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+
+                if (!res.ok) throw new Error("API 回傳錯誤");
+
+                alert("儲存成功！");
+                closeModal();
+                
+                // 重新載入資料以更新畫面
+                // location.reload(); // 整頁刷新 (簡單粗暴)
+                // 或者重新 fetch (體驗更好)
+                const userId = (await liff.getProfile()).userId;
+                await fetchData(userId);
+                renderList(document.getElementById('list-title').innerText); // 重新渲染當前列表
+
+            } catch (err) {
+                alert("更新失敗: " + err.message);
+            } finally {
+                btn.disabled = false; 
+                btn.innerText = "儲存更新";
+            }
+        }
+
+        // ==========================================
         // 地圖邏輯
         // ==========================================
         function getFuzzyIcon(cat) {
