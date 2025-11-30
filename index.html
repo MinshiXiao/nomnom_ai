@@ -453,6 +453,7 @@
                 const cashOnly = item.payment_methods?.includes("💰 只收現金");
                 const addressText = item.address || "無地址";
                 const categoryText = item.category || "未分類";
+                const mapUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(addressText)}`;
 
                 const el = document.createElement('div');
                 el.className = 'journal-card';
@@ -461,7 +462,13 @@
                         <div class="card-title">${item.name}</div>
                         <div style="font-weight:bold; color:#FF6B6B;">${rating}</div>
                     </div>
-                    <div class="card-info">📍 ${addressText}</div>
+                    <div class="card-info">
+                        📍 <a href="${mapUrl}" target="_blank" 
+                              onclick="event.stopPropagation()"
+                              style="color: #555; text-decoration: underline; cursor: pointer;">
+                              ${addressText}
+                           </a>
+                    </div>
                     <div class="card-info">📂 ${categoryText}</div>
                     <div class="card-badges" style="margin-top:8px;">
                         ${isVisited ? '<span class="badge visited">✅ 已造訪</span>' : '<span class="badge">📍 想去</span>'}
