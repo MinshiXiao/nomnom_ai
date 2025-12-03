@@ -425,70 +425,87 @@
             const container = document.getElementById('list-container');
             container.innerHTML = "";
 
-            // 1. 過濾邏輯 (正確)
+            // 1. 篩選邏輯 (不變)
             const filteredData = allData.filter(item => {
                 if (targetCategory === "全部") return true;
-                
-                // 統一取得分類名稱
                 const itemCat = getCategoryName(item);
-                
-                // 比對
                 return itemCat === targetCategory;
             });
 
-            // 2. 處理空資料 (正確)
             if (filteredData.length === 0) {
                 container.innerHTML = `<div style="text-align:center; color:#999; margin-top:50px;">此分類沒有餐廳</div>`;
                 return;
             }
 
-            // 3. 渲染卡片
+            // 2. 渲染卡片
             filteredData.forEach(item => {
                 const isVisited = item.visited === true;
                 const rating = item.user_rating ? `⭐ ${item.user_rating}` : "";
                 const cashOnly = item.payment_methods?.includes("💰 只收現金");
                 const addressText = item.address || "無地址";
-                const categoryText = getCategoryName(item); // 記得用函式取名
+                const categoryText = getCategoryName(item);
                 
-                // [修正 1] 使用標準 Google Maps 搜尋連結
-                // 格式：https://www.google.com/maps/search/?api=1&query=關鍵字
-                // 建議搜尋 "店名 + 地址"，準確度最高
+                // Google Maps 連結
                 const query = encodeURIComponent(`${item.name} ${item.address || ""}`);
+                // [技巧] 使用 apple maps 或是 google maps 通用協議
                 const mapUrl = `https://www.google.com/maps/search/?api=1&query=${query}`;
 
                 const el = document.createElement('div');
                 el.className = 'journal-card';
+                
                 el.innerHTML = `
                     <div class="card-header">
                         <div class="card-title">${item.name}</div>
                         <div style="font-weight:bold; color:#FF6B6B;">${rating}</div>
                     </div>
-                    <div class="card-info">
-                        📍 <a href="${mapUrl}" target="_blank" class="address-link" 
-                              style="color: #555; text-decoration: underline; cursor: pointer; position: relative; z-index: 2;">
-                              ${addressText}
-                           </a>
+                    
+                    <div class="card-info" style="margin: 8px 0;">
+                        <span style="font-size:16px;">📍</span> 
+                        
+                        <a href="${mapUrl}" 
+                           target="_blank" 
+                           class="address-link" 
+                           style="
+                               color: #007AFF; /* iOS 系統藍 */
+                               font-weight: bold;
+                               text-decoration: none; 
+                               border-bottom: 1px solid #007AFF; /* 自訂底線 */
+                               padding: 4px 0; /* 增加手指點擊範圍 */
+                               display: inline-block; /* 讓 padding 生效 */
+                               position: relative; 
+                               z-index: 10; /* 確保浮在最上層 */
+                           ">
+                           ${addressText}
+                        </a>
                     </div>
+                    
                     <div class="card-info">📂 ${categoryText}</div>
                     <div class="card-badges" style="margin-top:8px;">
                         ${isVisited ? '<span class="badge visited">✅ 已造訪</span>' : '<span class="badge">📍 想去</span>'}
                         ${cashOnly ? '<span class="badge cash-only">💰 只收現金</span>' : ''}
                     </div>
-                    <div class="card-review" style="margin-top:8px; color:#555;">${item.user_review || '(點擊撰寫筆記...)'}</div>
+                    <div class="card-review" style="margin-top:8px; color:#555;">${item.user_review || '<span style="color:#ccc; font-style:italic;">點擊撰寫筆記...</span>'}</div>
                 `;
 
-                // [修正 3] 事件綁定 (分離式寫法最穩)
+                // [重點修改] 點擊事件分離邏輯
                 
-                // 卡片點擊 -> 開啟編輯
+                // 1. 卡片點擊 (開啟編輯)
                 el.onclick = function() {
                     openEditModal(item);
                 };
 
-                // 地址點擊 -> 阻止冒泡 (不要觸發編輯)
+                // 2. 地址點擊 (強制跳轉)
                 const link = el.querySelector('.address-link');
                 if (link) {
                     link.onclick = function(e) {
-                        e.stopPropagation(); // 關鍵！
+                        // ✋ 絕對停止冒泡
+                        e.stopPropagation(); 
+                        e.preventDefault(); // 阻止 <a> 標籤預設行為，改由 JS 控制
+                        
+                        console.log("地址被點擊，準備跳轉");
+                        
+                        // 強制開啟視窗
+                        window.open(mapUrl, '_blank');
                     };
                 }
 
