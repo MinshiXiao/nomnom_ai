@@ -421,11 +421,12 @@
         }
         
         // 3. 渲染列表 (含強力篩選邏輯)
+        // [終極修正版] 渲染列表
         function renderList(targetCategory) {
             const container = document.getElementById('list-container');
             container.innerHTML = "";
 
-            // 1. 篩選邏輯 (不變)
+            // 1. 篩選邏輯
             const filteredData = allData.filter(item => {
                 if (targetCategory === "全部") return true;
                 const itemCat = getCategoryName(item);
@@ -445,37 +446,34 @@
                 const addressText = item.address || "無地址";
                 const categoryText = getCategoryName(item);
                 
-                // Google Maps 連結
+                // [修正 1] 補上漏掉的 $ 符號，並改用更穩定的 Google Maps 搜尋連結格式
                 const query = encodeURIComponent(`${item.name} ${item.address || ""}`);
-                // [技巧] 使用 apple maps 或是 google maps 通用協議
                 const mapUrl = `https://www.google.com/maps/search/?api=1&query=${query}`;
-                console.log("生成地圖連結:", mapUrl);
-                
+
                 const el = document.createElement('div');
                 el.className = 'journal-card';
                 
-                // [強力修正版 HTML]
+                // [修正 2] HTML 結構優化
                 el.innerHTML = `
                     <div class="card-header">
                         <div class="card-title">${item.name}</div>
                         <div style="font-weight:bold; color:#FF6B6B;">${rating}</div>
                     </div>
                     
-                    <div class="card-info" style="margin: 8px 0; position: relative; z-index: 5;">
-                        <span style="font-size:16px;">📍</span> 
+                    <div class="card-info" style="margin: 8px 0; display: flex; align-items: flex-start;">
+                        <span style="margin-right: 4px;">📍</span> 
                         
                         <a href="${mapUrl}" 
                            target="_blank" 
                            class="address-link"
-                           onclick="event.stopPropagation();"
                            style="
-                               color: #007AFF !important; 
-                               text-decoration: underline !important; 
-                               font-weight: bold !important;
-                               cursor: pointer !important;
-                               pointer-events: auto !important;
-                               display: inline-block;
-                               padding: 5px;
+                               color: #007AFF; 
+                               font-weight: bold; 
+                               text-decoration: underline; 
+                               cursor: pointer;
+                               position: relative; 
+                               z-index: 10; 
+                               line-height: 1.4;
                            ">
                            ${addressText}
                         </a>
@@ -488,16 +486,23 @@
                     </div>
                     <div class="card-review" style="margin-top:8px; color:#555;">${item.user_review || '<span style="color:#ccc; font-style:italic;">點擊撰寫筆記...</span>'}</div>
                 `;
-    
-                // 卡片點擊事件 (編輯)
-                el.onclick = function(e) {
-                    // 再次確保：如果點到的是連結 (A tag)，就不觸發編輯
-                    if (e.target.tagName === 'A' || e.target.closest('a')) {
-                        return; 
-                    }
+
+                // [修正 3] 事件綁定分離 (最穩的做法)
+                
+                // 卡片點擊 -> 開啟編輯
+                el.onclick = function() {
                     openEditModal(item);
                 };
-    
+
+                // 連結點擊 -> 阻止冒泡
+                const link = el.querySelector('.address-link');
+                if (link) {
+                    link.onclick = function(e) {
+                        e.stopPropagation(); // 阻止事件傳給卡片
+                        // 讓 <a> 標籤執行預設跳轉行為
+                    };
+                }
+
                 container.appendChild(el);
             });
         }
