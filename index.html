@@ -425,35 +425,36 @@
             const container = document.getElementById('list-container');
             container.innerHTML = "";
 
-            // console.log("正在篩選:", targetCategory); // 除錯用
-
-            // [關鍵修正] 過濾邏輯
+            // 1. 過濾邏輯 (正確)
             const filteredData = allData.filter(item => {
-                // 如果是 "全部"，直接通過
                 if (targetCategory === "全部") return true;
-
-                // 處理每一筆資料的 category，邏輯必須跟 renderCategories 完全一樣
-                const rawCat = item.category ? String(item.category) : "未分類";
-                const itemCat = rawCat.trim();
                 
-                // 比對 (皆為字串且已去空白)
+                // 統一取得分類名稱
+                const itemCat = getCategoryName(item);
+                
+                // 比對
                 return itemCat === targetCategory;
             });
 
-            // 處理空資料
+            // 2. 處理空資料 (正確)
             if (filteredData.length === 0) {
                 container.innerHTML = `<div style="text-align:center; color:#999; margin-top:50px;">此分類沒有餐廳</div>`;
                 return;
             }
-        
-            // 渲染卡片
+
+            // 3. 渲染卡片
             filteredData.forEach(item => {
                 const isVisited = item.visited === true;
                 const rating = item.user_rating ? `⭐ ${item.user_rating}` : "";
                 const cashOnly = item.payment_methods?.includes("💰 只收現金");
                 const addressText = item.address || "無地址";
-                const categoryText = item.category || "未分類";
-                const mapUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(addressText)}`;
+                const categoryText = getCategoryName(item); // 記得用函式取名
+                
+                // [修正 1] 使用標準 Google Maps 搜尋連結
+                // 格式：https://www.google.com/maps/search/?api=1&query=關鍵字
+                // 建議搜尋 "店名 + 地址"，準確度最高
+                const query = encodeURIComponent(`${item.name} ${item.address || ""}`);
+                const mapUrl = `https://www.google.com/maps/search/?api=1&query=${query}`;
 
                 const el = document.createElement('div');
                 el.className = 'journal-card';
@@ -463,9 +464,8 @@
                         <div style="font-weight:bold; color:#FF6B6B;">${rating}</div>
                     </div>
                     <div class="card-info">
-                        📍 <a href="${mapUrl}" target="_blank" 
-                              onclick="event.stopPropagation()"
-                              style="color: #555; text-decoration: underline; cursor: pointer;">
+                        📍 <a href="${mapUrl}" target="_blank" class="address-link" 
+                              style="color: #555; text-decoration: underline; cursor: pointer; position: relative; z-index: 2;">
                               ${addressText}
                            </a>
                     </div>
@@ -476,7 +476,22 @@
                     </div>
                     <div class="card-review" style="margin-top:8px; color:#555;">${item.user_review || '(點擊撰寫筆記...)'}</div>
                 `;
-                el.onclick = () => openEditModal(item);
+
+                // [修正 3] 事件綁定 (分離式寫法最穩)
+                
+                // 卡片點擊 -> 開啟編輯
+                el.onclick = function() {
+                    openEditModal(item);
+                };
+
+                // 地址點擊 -> 阻止冒泡 (不要觸發編輯)
+                const link = el.querySelector('.address-link');
+                if (link) {
+                    link.onclick = function(e) {
+                        e.stopPropagation(); // 關鍵！
+                    };
+                }
+
                 container.appendChild(el);
             });
         }
