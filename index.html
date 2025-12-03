@@ -421,7 +421,6 @@
         }
         
         // 3. 渲染列表 (含強力篩選邏輯)
-        // [修正版] 渲染列表
         function renderList(targetCategory) {
             const container = document.getElementById('list-container');
             container.innerHTML = "";
@@ -802,59 +801,7 @@
             document.getElementById('restaurant-layer').style.display = 'none';
             document.getElementById('category-layer').style.display = 'block';
         }
-
-        // 3. 渲染列表
-        function renderList(targetCategory) {
-            const container = document.getElementById('list-container');
-            container.innerHTML = "";
-
-            // console.log("目標分類:", targetCategory);
-
-            // 過濾資料
-            const filteredData = allData.filter(item => {
-                // 如果目標是 "全部"，回傳 true
-                if (targetCategory === "全部") return true;
-
-                // ✅ 使用同一支函式取得名稱，保證能對上
-                const itemCat = getCategoryName(item);
-                
-                // console.log(`比對: ${itemCat} === ${targetCategory}`); // 除錯用
-                return itemCat === targetCategory;
-            });
-
-            if (filteredData.length === 0) {
-                container.innerHTML = `<div style="text-align:center; color:#999; margin-top:50px;">此分類沒有餐廳</div>`;
-                return;
-            }
-
-            filteredData.forEach(item => {
-                const isVisited = item.visited === true;
-                const rating = item.user_rating ? `⭐ ${item.user_rating}` : "";
-                const cashOnly = item.payment_methods?.includes("💰 只收現金");
-                
-                // 顯示用的變數
-                const addressText = item.address || "無地址";
-                const categoryText = getCategoryName(item); // 這裡也統一用函式顯示
-
-                const el = document.createElement('div');
-                el.className = 'journal-card';
-                el.innerHTML = `
-                    <div class="card-header">
-                        <div class="card-title">${item.name}</div>
-                        <div style="font-weight:bold; color:#FF6B6B;">${rating}</div>
-                    </div>
-                    <div class="card-info">📍 ${addressText}</div>
-                    <div class="card-info">📂 ${categoryText}</div>
-                    <div class="card-badges" style="margin-top:8px;">
-                        ${isVisited ? '<span class="badge visited">✅ 已造訪</span>' : '<span class="badge">📍 想去</span>'}
-                        ${cashOnly ? '<span class="badge cash-only">💰 只收現金</span>' : ''}
-                    </div>
-                    <div class="card-review">${item.user_review || '<span style="color:#ccc; font-style:italic;">點擊撰寫筆記...</span>'}</div>
-                `;
-                el.onclick = () => openEditModal(item);
-                container.appendChild(el);
-            });
-        }
+        
     </script>
     
     <script>
