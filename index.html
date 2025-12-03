@@ -449,31 +449,33 @@
                 const query = encodeURIComponent(`${item.name} ${item.address || ""}`);
                 // [技巧] 使用 apple maps 或是 google maps 通用協議
                 const mapUrl = `https://www.google.com/maps/search/?api=1&query=${query}`;
-
+                console.log("生成地圖連結:", mapUrl);
+                
                 const el = document.createElement('div');
                 el.className = 'journal-card';
                 
+                // [強力修正版 HTML]
                 el.innerHTML = `
                     <div class="card-header">
                         <div class="card-title">${item.name}</div>
                         <div style="font-weight:bold; color:#FF6B6B;">${rating}</div>
                     </div>
                     
-                    <div class="card-info" style="margin: 8px 0;">
+                    <div class="card-info" style="margin: 8px 0; position: relative; z-index: 5;">
                         <span style="font-size:16px;">📍</span> 
                         
                         <a href="${mapUrl}" 
                            target="_blank" 
-                           class="address-link" 
+                           class="address-link"
+                           onclick="event.stopPropagation();"
                            style="
-                               color: #007AFF; /* iOS 系統藍 */
-                               font-weight: bold;
-                               text-decoration: none; 
-                               border-bottom: 1px solid #007AFF; /* 自訂底線 */
-                               padding: 4px 0; /* 增加手指點擊範圍 */
-                               display: inline-block; /* 讓 padding 生效 */
-                               position: relative; 
-                               z-index: 10; /* 確保浮在最上層 */
+                               color: #007AFF !important; 
+                               text-decoration: underline !important; 
+                               font-weight: bold !important;
+                               cursor: pointer !important;
+                               pointer-events: auto !important;
+                               display: inline-block;
+                               padding: 5px;
                            ">
                            ${addressText}
                         </a>
@@ -486,29 +488,16 @@
                     </div>
                     <div class="card-review" style="margin-top:8px; color:#555;">${item.user_review || '<span style="color:#ccc; font-style:italic;">點擊撰寫筆記...</span>'}</div>
                 `;
-
-                // [重點修改] 點擊事件分離邏輯
-                
-                // 1. 卡片點擊 (開啟編輯)
-                el.onclick = function() {
+    
+                // 卡片點擊事件 (編輯)
+                el.onclick = function(e) {
+                    // 再次確保：如果點到的是連結 (A tag)，就不觸發編輯
+                    if (e.target.tagName === 'A' || e.target.closest('a')) {
+                        return; 
+                    }
                     openEditModal(item);
                 };
-
-                // 2. 地址點擊 (強制跳轉)
-                const link = el.querySelector('.address-link');
-                if (link) {
-                    link.onclick = function(e) {
-                        // ✋ 絕對停止冒泡
-                        e.stopPropagation(); 
-                        e.preventDefault(); // 阻止 <a> 標籤預設行為，改由 JS 控制
-                        
-                        console.log("地址被點擊，準備跳轉");
-                        
-                        // 強制開啟視窗
-                        window.open(mapUrl, '_blank');
-                    };
-                }
-
+    
                 container.appendChild(el);
             });
         }
